@@ -19,3 +19,5 @@ artifacts/
 *.binlog
 *.nupkg
 *.snupkg
+/Properties
+/RamenScenarioAnalyzer.slnx
