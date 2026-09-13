@@ -184,6 +184,10 @@ public sealed class TurnInfoRamen
     {
         this.response = response;
         DataSet = response.DataSet;
+        if (response.CharaInfo.turn == 1)
+        {
+            RamenScenarioState.UpdateScenarioStateCharaID(response);
+        }
         var commandsByBaseTrainId = DataSet.command_info_array
             .Where(x => x.command_type == 1 && ToTrainIndex.ContainsKey(x.command_id))
             .GroupBy(x => ToTrainId[x.command_id])

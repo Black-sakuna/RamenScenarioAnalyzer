@@ -17,7 +17,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="RamenScenarioAnalyzerSmoke" />
+    <Compile Remove="Properties\**" />
     <Compile Remove="tests\**\*.cs" />
+    <EmbeddedResource Remove="Properties\**" />
+    <None Remove="Properties\**" />
   </ItemGroup>
 
   <ItemGroup>

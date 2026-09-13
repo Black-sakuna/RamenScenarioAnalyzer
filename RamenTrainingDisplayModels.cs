@@ -1,4 +1,5 @@
 using Gallop;
+using System.Text;
 
 namespace RamenScenarioAnalyzer;
 
@@ -114,8 +115,8 @@ internal sealed class RamenTrainingDisplayBuilder
                     _ => RamenDisplayColor.Red
                 })));
 
-        builder.ScenarioPanels.Add(new("special-feeling", "特殊心得", $"特殊心得: {context.DataSet.special_feeling_num}"));
-        builder.ScenarioPanels.Add(new("feeling", "心得", $"心得: {context.DataSet.feeling_info_array?.Length ?? 0}"));
+        builder.ScenarioPanels.Add(new("special-feeling", "特殊心得", $"秘方数量: {context.DataSet.special_feeling_num}"));
+        //builder.ScenarioPanels.Add(new("feeling", "心得", $"心得: {context.DataSet.feeling_info_array?.Length ?? 0}"));
         builder.ScenarioPanels.Add(new("active-effect", "生效效果", $"效果: {context.DataSet.active_effect_array?.Length ?? 0}"));
         builder.ScenarioPanels.Add(new(
             "uraf",
@@ -131,6 +132,16 @@ internal sealed class RamenTrainingDisplayBuilder
             builder.ImportantRows.Add(RamenDisplayLine.Colored(
                 "缺少剧本状态信息，需要从游戏主页重新进入育成",
                 RamenDisplayColor.Red));
+            RamenScenarioState.RamenScenarioStateCheckLoaded(data.CharaInfo.single_mode_chara_id);
+        }
+        if (stateSnap.selected_region_id_array.Length > 0 && stateSnap.selected_region_id_array[0] != 0)
+        {
+            var ef = builder.FindScenarioPanel("active-effect");
+            ef.Title = "区域信息";
+            List<string> regions = stateSnap.selected_region_id_array.
+                Select(id => RamenDisplayText.Region_ID_Name.TryGetValue(id, out string name) ? name : null).
+                Where(name => name != null).ToList();
+            ef.Content = $"区域: {string.Join(",", regions)}";
         }
 
         if (data.CommandResult is not null)
@@ -154,8 +165,28 @@ internal sealed class RamenTrainingDisplayBuilder
 
         foreach (var item in context.DataSet.training_exec_info_array ?? [])
             builder.ExtraRows.Add($"训练次数: {item.base_command_id} = {item.exec_count}");
-        foreach (var item in context.DataSet.active_effect_array ?? [])
-            builder.ExtraRows.Add($"效果: category={item.effect_category}, id={item.effect_id}, value={item.effect_value}");
+        //foreach (var item in context.DataSet.active_effect_array ?? [])
+        //    builder.ExtraRows.Add($"效果: category={item.effect_category}, id={item.effect_id}, value={item.effect_value}");
+        if (stateSnap.selected_region_id_array.Length > 0 && context.DataSet.feeling_info_array.Length > 0 && stateSnap.selected_region_id_array[0] != 0)
+        {
+            Dictionary<int, int> feeling_array = new() { { 1, 0 }, { 2, 0 }, { 3, 0 } };
+            foreach (SingleModeRamenFeeling info in context.DataSet.feeling_info_array)
+            {
+                if (info.feeling_id == 0)
+                    continue;
+                feeling_array[info.feeling_id]++;
+            }
+            builder.ExtraRows.Add(RamenDisplayLine.Rule);
+            builder.ExtraRows.Add(RamenDisplayLine.Plain("食材统计: "));
+            foreach (var feels in feeling_array)
+                builder.ExtraRows.Add(RamenDisplayLine.Styled(new($"{RamenDisplayText.Feeling_Name(feels.Key)}"), new($"：{feels.Value}")));
+            foreach (int region_id in stateSnap.selected_region_id_array)
+            {
+                builder.ExtraRows.Add(RamenDisplayLine.Rule);
+                builder.ExtraRows.Add(GetUseRegionTurnInfo(region_id, feeling_array));
+            }
+        }
+
         return builder;
     }
 
@@ -208,7 +239,46 @@ internal sealed class RamenTrainingDisplayBuilder
         for (var i = 8 - command.TrainingPartners.Count; i > 0; i--)
             card.AddRow(string.Empty);
         card.AddRule();
+
+        if (turn.DataSet.feeling_reduce_turn_info_array.Length > 0)
+        {
+            card.AddRow(RamenDisplayLine.Plain($"{RamenDisplayText.Feeling_Name(1)}: {GetProcFeelingTurnInfo(1, command.CommandId, turn.DataSet)}"));
+            card.AddRow(RamenDisplayLine.Plain($"{RamenDisplayText.Feeling_Name(2)}: {GetProcFeelingTurnInfo(2, command.CommandId, turn.DataSet)}"));
+            card.AddRow(RamenDisplayLine.Plain($"{RamenDisplayText.Feeling_Name(3)}: {GetProcFeelingTurnInfo(3, command.CommandId, turn.DataSet)}"));
+        }
+
         return card;
+    }
+
+    static string GetProcFeelingTurnInfo(int feelingId, int commandId, SingleModeRamenDataSet dataSet)
+    {
+        int remain_turn = dataSet.feeling_turn_info_array.First(x => x.feeling_id == feelingId).remain_turn;
+        int reduce_turn = dataSet.feeling_reduce_turn_info_array.First(y => y.command_id == commandId).feeling_turn_array.First(z => z.feeling_id == feelingId).turn;
+
+        int feeling_turn_info = 7 - remain_turn;
+
+        int total_turn = 7 - remain_turn + reduce_turn;
+
+        if (total_turn >= 7)
+        {
+            return "进度完成";
+        }
+        else
+        {
+            return $"{feeling_turn_info} => {7 - remain_turn + reduce_turn}";
+        }
+    }
+    static string GetUseRegionTurnInfo(int region_id, Dictionary<int, int> feeling_array)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.AppendLine($"试食拉面：{RamenDisplayText.Region_ID_Name[region_id]}");
+        int[] uraf_effect = RamenDisplayText.Region_Reduce_Info[region_id];
+        foreach (var id in feeling_array)
+        {
+            int feeling_result = id.Value - uraf_effect[id.Key - 1];
+            sb.AppendLine($"<{RamenDisplayText.Feeling_Name(id.Key)}> {id.Value} => {feeling_result}");
+        }
+        return sb.ToString();
     }
 }
 
@@ -255,6 +325,59 @@ internal static class RamenDisplayText
         "ja-JP" => "このターンは重複して表示されます",
         _ => "This turn is a duplicate display"
     };
+    public static string Feeling_Name(int feelingId) => feelingId switch
+    {
+        1 => "面",
+        2 => "汤",
+        3 => "菜",
+        _ => ""
+    };
+    public static Dictionary<int, string> Region_ID_Name = new Dictionary<int, string>()
+        {
+            { 1, "札幌" },
+            { 2, "函馆" },
+            { 3, "新潟" },
+            { 4, "福岛" },
+            { 5, "东京" },
+            { 6, "中山" },
+            { 7, "中京" },
+            { 8, "京都" },
+            { 9, "阪神" },
+            { 10, "小仓" },
+            { 11, "札幌" },
+            { 12, "函馆" },
+            { 13, "新潟" },
+            { 14, "福岛" },
+            { 15, "东京" },
+            { 16, "中山" },
+            { 17, "中京" },
+            { 18, "京都" },
+            { 19, "阪神" },
+            { 20, "小仓" }
+        };
+    public static Dictionary<int, int[]> Region_Reduce_Info = new Dictionary<int, int[]>()
+        {
+            { 1, new int[] { 2, 2, 1 } },
+            { 2, new int[] { 1, 2, 2 } },
+            { 3, new int[] { 3, 1, 1 } },
+            { 4, new int[] { 2, 3, 0 } },
+            { 5, new int[] { 1, 1, 3 }},
+            { 6, new int[] { 2, 0, 3 } },
+            { 7, new int[] { 3, 2, 0 } },
+            { 8, new int[] { 0, 3, 2 } },
+            { 9, new int[] { 2, 1, 2 } },
+            { 10, new int[] { 1, 3, 1 } },
+            { 11, new int[] { 2, 2, 1 } },
+            { 12, new int[] { 1, 2, 2 } },
+            { 13, new int[] { 3, 1, 1 } },
+            { 14, new int[] { 2, 3, 0 } },
+            { 15, new int[] { 1, 1, 3 }},
+            { 16, new int[] { 2, 0, 3 } },
+            { 17, new int[] { 3, 2, 0 } },
+            { 18, new int[] { 0, 3, 2 } },
+            { 19, new int[] { 2, 1, 2 } },
+            { 20, new int[] { 1, 3, 1 } }
+        };
     static string MotivationBest => Culture switch { "zh-CN" => "绝好调", "ja-JP" => "絶好調", _ => "Best" };
     static string MotivationGood => Culture switch { "zh-CN" => "好调", "ja-JP" => "好調", _ => "Good" };
     static string MotivationNormal => Culture switch { "zh-CN" => "普通", "ja-JP" => "普通", _ => "Normal" };

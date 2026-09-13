@@ -1,4 +1,5 @@
 using Gallop;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace RamenScenarioAnalyzer;
 
@@ -61,6 +62,44 @@ public static class RamenScenarioState
             expected_check_point_pt = data.expected_check_point_pt;
 
             loaded = true;
+        }
+    }
+    public static void RamenScenarioStateCheckLoaded(int charaId)
+    {
+        bool flag1 = single_mode_chara_id == charaId;
+        bool flag2 = selected_region_id_array.Length > 0 && selected_region_id_array[0] > 0;
+        bool flag3 = reduce_base_turn.Length > 0 && reduce_base_turn[0] > 0;
+        bool flag4 = last_ramen > 0;
+        bool flag5 = check_point_pt > 0;
+        bool flag6 = expected_check_point_pt > 0;
+        if (flag1 && flag2 && flag3 && flag4 && flag5 && flag6)
+            loaded = true;
+        else
+            loaded = false;
+    }
+
+    public static void UpdateScenarioStateRegionSelectCheck(SingleModeRamenRegionSelectCheckResponse response)
+    {
+        var data = response.data;
+        Array.Clear(reduce_base_turn, 0, reduce_base_turn.Length);
+        if (data.reduce_base_turn_info_array is not null)
+            foreach (var info in data.reduce_base_turn_info_array)
+            {
+                var idx = info.feeling_id - 1;
+                if (idx >= 0 && idx < reduce_base_turn.Length)
+                    reduce_base_turn[idx] = info.reduce_base_turn;
+            }
+    }
+
+    public static void UpdateScenarioStateCharaID(RamenScenarioResponseData data)
+    {
+
+        if (data is null)
+            return;
+
+        lock (Gate)
+        {
+            single_mode_chara_id = data.CharaInfo.single_mode_chara_id;
         }
     }
 

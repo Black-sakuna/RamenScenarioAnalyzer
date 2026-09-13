@@ -45,6 +45,17 @@ public sealed class RamenScenarioAnalyzer : IPlugin
             [EndpointPattern.Exact("/umamusume/single_mode_ramen/select_region")],
             invocation => AnalyzeRegionSelect(invocation.Payload),
             priority: 0);
+        context.Analyzers.Register<SingleModeRamenRegionSelectCheckResponse>(
+            AnalyzerKind.Response,
+            [EndpointPattern.Exact("/umamusume/single_mode_ramen/region_select_check")],
+            invocation => AnalyzeRegionSelectCheck(invocation.Payload),
+            priority: 0);
+    }
+
+    static ValueTask AnalyzeRegionSelectCheck(SingleModeRamenRegionSelectCheckResponse response)
+    {
+        RamenScenarioState.UpdateScenarioStateRegionSelectCheck(response);
+        return ValueTask.CompletedTask;
     }
 
     static ValueTask AnalyzeTasting(SingleModeRamenTastingResponse response)
